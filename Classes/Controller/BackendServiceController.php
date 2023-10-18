@@ -13,12 +13,15 @@ namespace Neos\Neos\Ui\Controller;
  * source code.
  */
 
+use Neos\ContentRepository\Core\Feature\WorkspaceModification\Command\ChangeBaseWorkspace;
+use Neos\ContentRepository\Core\Feature\WorkspaceModification\Exception\WorkspaceIsNotEmptyException;
 use Neos\ContentRepository\Core\Feature\WorkspacePublication\Command\DiscardIndividualNodesFromWorkspace;
 use Neos\ContentRepository\Core\Feature\WorkspacePublication\Command\PublishIndividualNodesFromWorkspace;
 use Neos\ContentRepository\Core\Feature\WorkspacePublication\Dto\NodeIdsToPublishOrDiscard;
 use Neos\ContentRepository\Core\Feature\WorkspacePublication\Dto\NodeIdToPublishOrDiscard;
 use Neos\ContentRepository\Core\Projection\ContentGraph\VisibilityConstraints;
 use Neos\ContentRepository\Core\SharedModel\Exception\NodeAggregateCurrentlyDoesNotExist;
+use Neos\ContentRepository\Core\SharedModel\Workspace\WorkspaceName;
 use Neos\ContentRepositoryRegistry\ContentRepositoryRegistry;
 use Neos\Eel\FlowQuery\FlowQuery;
 use Neos\Flow\Annotations as Flow;
@@ -29,20 +32,21 @@ use Neos\Flow\Mvc\View\JsonView;
 use Neos\Flow\Persistence\PersistenceManagerInterface;
 use Neos\Flow\Property\PropertyMapper;
 use Neos\Flow\Security\Context;
-use Neos\Neos\Domain\Model\WorkspaceName as NeosWorkspaceName;
+use Neos\Neos\Domain\Service\WorkspaceNameBuilder;
 use Neos\Neos\FrontendRouting\NodeAddress;
 use Neos\Neos\FrontendRouting\NodeAddressFactory;
 use Neos\Neos\FrontendRouting\SiteDetection\SiteDetectionResult;
 use Neos\Neos\Service\UserService;
-use Neos\Neos\Ui\ContentRepository\Service\NodeService;
+use Neos\Neos\Ui\ContentRepository\Service\NeosUiNodeService;
 use Neos\Neos\Ui\ContentRepository\Service\WorkspaceService;
 use Neos\Neos\Ui\Domain\Model\ChangeCollection;
 use Neos\Neos\Ui\Domain\Model\Feedback\Messages\Error;
 use Neos\Neos\Ui\Domain\Model\Feedback\Messages\Info;
 use Neos\Neos\Ui\Domain\Model\Feedback\Messages\Success;
+use Neos\Neos\Ui\Domain\Model\Feedback\Operations\Redirect;
+use Neos\Neos\Ui\Domain\Model\Feedback\Operations\ReloadDocument;
 use Neos\Neos\Ui\Domain\Model\Feedback\Operations\UpdateWorkspaceInfo;
 use Neos\Neos\Ui\Domain\Model\FeedbackCollection;
-use Neos\Neos\Ui\Domain\Service\NodeTreeBuilder;
 use Neos\Neos\Ui\Fusion\Helper\NodeInfoHelper;
 use Neos\Neos\Ui\Fusion\Helper\WorkspaceHelper;
 use Neos\Neos\Ui\Service\NodeClipboard;
@@ -50,12 +54,6 @@ use Neos\Neos\Ui\Service\NodePolicyService;
 use Neos\Neos\Ui\Service\PublishingService;
 use Neos\Neos\Ui\TypeConverter\ChangeCollectionConverter;
 use Neos\Neos\Utility\NodeUriPathSegmentGenerator;
-use Neos\ContentRepository\Core\SharedModel\Workspace\WorkspaceName;
-use Neos\ContentRepository\Core\Feature\WorkspaceModification\Command\ChangeBaseWorkspace;
-use Neos\ContentRepository\Core\SharedModel\Workspace\ContentStreamId;
-use Neos\Neos\Ui\Domain\Model\Feedback\Operations\ReloadDocument;
-use Neos\Neos\Ui\Domain\Model\Feedback\Operations\Redirect;
-use Neos\ContentRepository\Core\Feature\WorkspaceModification\Exception\WorkspaceIsNotEmptyException;
 
 class BackendServiceController extends ActionController
 {
@@ -89,7 +87,7 @@ class BackendServiceController extends ActionController
 
     /**
      * @Flow\Inject
-     * @var NodeService
+     * @var NeosUiNodeService
      */
     protected $nodeService;
 
@@ -195,8 +193,7 @@ class BackendServiceController extends ActionController
         $contentRepository = $this->contentRepositoryRegistry->get($contentRepositoryId);
 
         $currentAccount = $this->securityContext->getAccount();
-        $workspaceName = NeosWorkspaceName::fromAccountIdentifier($currentAccount->getAccountIdentifier())
-            ->toContentRepositoryWorkspaceName();
+        $workspaceName = WorkspaceNameBuilder::fromAccountIdentifier($currentAccount->getAccountIdentifier());
         $this->publishingService->publishWorkspace($contentRepository, $workspaceName);
 
         $success = new Success();
@@ -222,8 +219,7 @@ class BackendServiceController extends ActionController
 
         try {
             $currentAccount = $this->securityContext->getAccount();
-            $workspaceName = NeosWorkspaceName::fromAccountIdentifier($currentAccount->getAccountIdentifier())
-                ->toContentRepositoryWorkspaceName();
+            $workspaceName = WorkspaceNameBuilder::fromAccountIdentifier($currentAccount->getAccountIdentifier());
 
             $nodeIdentifiersToPublish = [];
             foreach ($nodeContextPaths as $contextPath) {
@@ -282,8 +278,7 @@ class BackendServiceController extends ActionController
 
         try {
             $currentAccount = $this->securityContext->getAccount();
-            $workspaceName = NeosWorkspaceName::fromAccountIdentifier($currentAccount->getAccountIdentifier())
-                ->toContentRepositoryWorkspaceName();
+            $workspaceName = WorkspaceNameBuilder::fromAccountIdentifier($currentAccount->getAccountIdentifier());
 
             $nodeIdentifiersToDiscard = [];
             foreach ($nodeContextPaths as $contextPath) {
@@ -294,18 +289,27 @@ class BackendServiceController extends ActionController
                     $nodeAddress->dimensionSpacePoint
                 );
             }
-            $contentRepository->handle(
-                DiscardIndividualNodesFromWorkspace::create(
-                    $workspaceName,
-                    NodeIdsToPublishOrDiscard::create(...$nodeIdentifiersToDiscard)
-                )
-            )->block();
+
+            $command = DiscardIndividualNodesFromWorkspace::create(
+                $workspaceName,
+                NodeIdsToPublishOrDiscard::create(...$nodeIdentifiersToDiscard)
+            );
+            $removeNodeFeedback = $this->workspaceService
+                ->predictRemoveNodeFeedbackFromDiscardIndividualNodesFromWorkspaceCommand(
+                    $command,
+                    $contentRepository
+                );
+
+            $contentRepository->handle($command)->block();
 
             $success = new Success();
             $success->setMessage(sprintf('Discarded %d node(s).', count($nodeContextPaths)));
 
             $updateWorkspaceInfo = new UpdateWorkspaceInfo($contentRepositoryId, $workspaceName);
             $this->feedbackCollection->add($success);
+            foreach ($removeNodeFeedback as $removeNode) {
+                $this->feedbackCollection->add($removeNode);
+            }
             $this->feedbackCollection->add($updateWorkspaceInfo);
         } catch (\Exception $e) {
             $error = new Error();
@@ -334,18 +338,13 @@ class BackendServiceController extends ActionController
         $nodeAddress = $nodeAddressFactory->createFromUriString($documentNode);
 
         $currentAccount = $this->securityContext->getAccount();
-        $userWorkspaceName = NeosWorkspaceName::fromAccountIdentifier(
+        $userWorkspaceName = WorkspaceNameBuilder::fromAccountIdentifier(
             $currentAccount->getAccountIdentifier()
-        )->toContentRepositoryWorkspaceName();
+        );
 
+        $command = ChangeBaseWorkspace::create($userWorkspaceName, WorkspaceName::fromString($targetWorkspaceName));
         try {
-            $contentRepository->handle(
-                new ChangeBaseWorkspace(
-                    $userWorkspaceName,
-                    WorkspaceName::fromString($targetWorkspaceName),
-                    $newCOnt = ContentStreamId::create()
-                )
-            )->block();
+            $contentRepository->handle($command)->block();
         } catch (WorkspaceIsNotEmptyException $exception) {
             $error = new Error();
             $error->setMessage('Your personal workspace currently contains unpublished changes.'
@@ -366,7 +365,7 @@ class BackendServiceController extends ActionController
 
         $subgraph = $contentRepository->getContentGraph()
             ->getSubgraph(
-                $newCOnt,
+                $command->newContentStreamId,
                 $nodeAddress->dimensionSpacePoint,
                 VisibilityConstraints::withoutRestrictions()
             );
@@ -479,22 +478,6 @@ class BackendServiceController extends ActionController
         $this->view->assign('value', $personalWorkspaceInfo);
     }
 
-    public function initializeLoadTreeAction(): void
-    {
-        $this->arguments['nodeTreeArguments']->getPropertyMappingConfiguration()->allowAllProperties();
-    }
-
-    /**
-     * Load the nodetree
-     */
-    public function loadTreeAction(NodeTreeBuilder $nodeTreeArguments, bool $includeRoot = false): void
-    {
-        $contentRepositoryId = SiteDetectionResult::fromRequest($this->request->getHttpRequest())->contentRepositoryId;
-
-        $nodeTreeArguments->setControllerContext($this->controllerContext);
-        $this->view->assign('value', $nodeTreeArguments->build($contentRepositoryId, $includeRoot));
-    }
-
     /**
      * @throws \Neos\Flow\Mvc\Exception\NoSuchArgumentException
      */
@@ -590,7 +573,7 @@ class BackendServiceController extends ActionController
         /** @var array<int,mixed> $payload */
         $payload = $createContext['payload'] ?? [];
         $flowQuery = new FlowQuery(array_map(
-            fn ($envelope) => $this->nodeService->getNodeFromContextPath($envelope['$node'], $contentRepositoryId),
+            fn ($envelope) => $this->nodeService->findNodeBySerializedNodeAddress($envelope['$node'], $contentRepositoryId),
             $payload
         ));
 

@@ -4,13 +4,24 @@ import {PublishDropDown, Page} from './pageModel';
 
 export const subSection = name => console.log('\x1b[33m%s\x1b[0m', ' - ' + name);
 
-const adminUrl = 'http://127.0.0.1:8081/neos';
 const adminUserName = 'admin';
-const adminPassword = 'password';
+const adminPassword = 'admin';
 
 export const getUrl = ClientFunction(() => window.location.href);
 
-export const adminUser = Role(adminUrl, async t => {
+export const adminUserOnOneDimensionTestSite = Role('http://onedimension.localhost:8081/neos', async t => {
+    await t
+        .typeText('#username', adminUserName)
+        .typeText('#password', adminPassword)
+        .click('button.neos-login-btn');
+
+    await t.expect(getUrl()).contains('/content');
+
+    await waitForReact(30000);
+    await Page.waitForIframeLoading();
+}, {preserveUrl: true});
+
+export const adminUserOnTwoDimensionsTestSite = Role('http://twodimensions.localhost:8081/neos', async t => {
     await t
         .typeText('#username', adminUserName)
         .typeText('#password', adminPassword)
@@ -28,10 +39,6 @@ export async function checkPropTypes() {
     if (error[0] && error[0].search('Warning: Unsafe legacy lifecycles') >= 0) {
         delete error[0];
     }
-    // Quick fix to be able to use node 16 with testcafe @see https://github.com/DevExpress/testcafe/issues/7097
-    if (error[0] && error[0].search('hammerhead.js') >= 0) {
-        delete error[0];
-    }
     if (error[0]) {
         console.log('These console errors were the cause of the failed test:', error);
     }
@@ -39,7 +46,7 @@ export async function checkPropTypes() {
 }
 
 export async function beforeEach(t) {
-    await t.useRole(adminUser);
+    await t.useRole(adminUserOnOneDimensionTestSite);
     await waitForReact(30000);
     await PublishDropDown.discardAll();
     await Page.goToPage('Home');

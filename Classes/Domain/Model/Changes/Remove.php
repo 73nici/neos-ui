@@ -13,11 +13,13 @@ namespace Neos\Neos\Ui\Domain\Model\Changes;
  */
 
 use Neos\ContentRepository\Core\DimensionSpace\Exception\DimensionSpacePointNotFound;
+use Neos\ContentRepository\Core\Projection\ContentGraph\Filter\FindClosestNodeFilter;
 use Neos\ContentRepository\Core\SharedModel\Exception\ContentStreamDoesNotExistYet;
 use Neos\ContentRepository\Core\SharedModel\Node\NodeVariantSelectionStrategy;
 use Neos\ContentRepository\Core\Feature\NodeRemoval\Command\RemoveNodeAggregate;
 use Neos\ContentRepository\Core\SharedModel\Exception\NodeAggregatesTypeIsAmbiguous;
 use Neos\Flow\Annotations as Flow;
+use Neos\Neos\Domain\Service\NodeTypeNameFactory;
 use Neos\Neos\Fusion\Cache\ContentCacheFlusher;
 use Neos\Neos\Ui\Domain\Model\AbstractChange;
 use Neos\Neos\Ui\Domain\Model\Feedback\Operations\RemoveNode;
@@ -68,14 +70,17 @@ class Remove extends AbstractChange
             // otherwise we cannot find the parent nodes anymore.
             $this->updateWorkspaceInfo();
 
-            $closestDocumentParentNode = $this->findClosestDocumentNode($subject);
-            $command = new RemoveNodeAggregate(
+            $subgraph = $this->contentRepositoryRegistry->subgraphForNode($this->subject);
+            $closestDocumentParentNode = $subgraph->findClosestNode($this->subject->nodeAggregateId, FindClosestNodeFilter::create(nodeTypeConstraints: NodeTypeNameFactory::NAME_DOCUMENT));
+            $command = RemoveNodeAggregate::create(
                 $subject->subgraphIdentity->contentStreamId,
                 $subject->nodeAggregateId,
                 $subject->subgraphIdentity->dimensionSpacePoint,
                 NodeVariantSelectionStrategy::STRATEGY_ALL_SPECIALIZATIONS,
-                $closestDocumentParentNode?->nodeAggregateId
             );
+            if ($closestDocumentParentNode !== null) {
+                $command = $command->withRemovalAttachmentPoint($closestDocumentParentNode?->nodeAggregateId);
+            }
 
             $contentRepository = $this->contentRepositoryRegistry->get($subject->subgraphIdentity->contentRepositoryId);
             $contentRepository->handle($command)->block();

@@ -69,16 +69,16 @@ class MoveBefore extends AbstractStructuralChange
             $contentRepository = $this->contentRepositoryRegistry->get($subject->subgraphIdentity->contentRepositoryId);
 
             $contentRepository->handle(
-                new MoveNodeAggregate(
+                MoveNodeAggregate::create(
                     $subject->subgraphIdentity->contentStreamId,
                     $subject->subgraphIdentity->dimensionSpacePoint,
                     $subject->nodeAggregateId,
+                    RelationDistributionStrategy::STRATEGY_GATHER_ALL,
                     $hasEqualParentNode
                         ? null
                         : $succeedingSiblingParent->nodeAggregateId,
                     $precedingSibling?->nodeAggregateId,
                     $succeedingSibling->nodeAggregateId,
-                    RelationDistributionStrategy::STRATEGY_GATHER_ALL
                 )
             )->block();
 
@@ -86,9 +86,6 @@ class MoveBefore extends AbstractStructuralChange
             $updateParentNodeInfo->setNode($succeedingSiblingParent);
 
             $this->feedbackCollection->add($updateParentNodeInfo);
-
-            $removeNode = new RemoveNode($subject, $succeedingSiblingParent);
-            $this->feedbackCollection->add($removeNode);
 
             $this->finish($subject);
         }

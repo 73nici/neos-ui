@@ -113,13 +113,13 @@ abstract class AbstractCreate extends AbstractStructuralChange
         if (is_null($nodeTypeName)) {
             throw new \RuntimeException('Cannot run createNode without a set node type.', 1645577794);
         }
-        // TODO: the $name=... line should be as expressed below
-        // $name = $this->getName() ?: $this->nodeService->generateUniqueNodeName($parent->findParentNode());
-        $nodeName = NodeName::fromString($this->getName() ?: uniqid('node-', false));
+        $nodeName = $this->getName()
+            ? NodeName::fromString($this->getName())
+            : null;
 
         $nodeAggregateId = $this->getNodeAggregateId() ?? NodeAggregateId::create(); // generate a new NodeAggregateId
 
-        $command = new CreateNodeAggregateWithNode(
+        $command = CreateNodeAggregateWithNode::create(
             $parentNode->subgraphIdentity->contentStreamId,
             $nodeAggregateId,
             $nodeTypeName,

@@ -33,7 +33,7 @@ class MoveInto extends AbstractStructuralChange
             return null;
         }
 
-        return $this->nodeService->getNodeFromContextPath(
+        return $this->nodeService->findNodeBySerializedNodeAddress(
             $this->parentContextPath,
             $this->getSubject()->subgraphIdentity->contentRepositoryId
         );
@@ -80,23 +80,18 @@ class MoveInto extends AbstractStructuralChange
 
             $contentRepository = $this->contentRepositoryRegistry->get($subject->subgraphIdentity->contentRepositoryId);
             $contentRepository->handle(
-                new MoveNodeAggregate(
+                MoveNodeAggregate::create(
                     $subject->subgraphIdentity->contentStreamId,
                     $subject->subgraphIdentity->dimensionSpacePoint,
                     $subject->nodeAggregateId,
+                    RelationDistributionStrategy::STRATEGY_GATHER_ALL,
                     $hasEqualParentNode ? null : $parentNode->nodeAggregateId,
-                    null,
-                    null,
-                    RelationDistributionStrategy::STRATEGY_GATHER_ALL
                 )
             )->block();
 
             $updateParentNodeInfo = new UpdateNodeInfo();
             $updateParentNodeInfo->setNode($parentNode);
             $this->feedbackCollection->add($updateParentNodeInfo);
-
-            $removeNode = new RemoveNode($subject, $parentNode);
-            $this->feedbackCollection->add($removeNode);
 
             $this->finish($subject);
         }
