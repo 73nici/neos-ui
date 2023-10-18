@@ -132,7 +132,8 @@ abstract class AbstractCreate extends AbstractStructuralChange
 
         $commands = $this->applyNodeCreationHandlers(
             NodeCreationCommands::fromFirstCommand(
-                $command
+                $command,
+                $contentRepository->getNodeTypeManager()
             ),
             $nodeTypeName,
             $contentRepository
