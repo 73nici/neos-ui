@@ -21,18 +21,23 @@ use Neos\ContentRepository\Core\SharedModel\Exception\NodeTypeNotFoundException;
  * Note: This is not actually a Command Handler in the sense of CQRS but rather some kind of
  *       "command enricher"
  */
-class ContentTitleNodeCreationHandler implements NodeCreationHandlerInterface
+final readonly class ContentTitleNodeCreationHandler implements NodeCreationHandlerInterface
 {
+    public function __construct(
+        private ContentRepository $contentRepository
+    ) {
+    }
+
     /**
      * Set the node title for the newly created Content node
      *
      * @param array<string|int,mixed> $data incoming data from the creationDialog
      * @throws NodeTypeNotFoundException
      */
-    public function handle(NodeCreationCommands $commands, array $data, ContentRepository $contentRepository): NodeCreationCommands
+    public function handle(NodeCreationCommands $commands, array $data): NodeCreationCommands
     {
         if (
-            !$contentRepository->getNodeTypeManager()->getNodeType($commands->first->nodeTypeName)
+            !$this->contentRepository->getNodeTypeManager()->getNodeType($commands->first->nodeTypeName)
                 ->isOfType('Neos.Neos:Content')
         ) {
             return $commands;
