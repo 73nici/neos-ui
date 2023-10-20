@@ -14,7 +14,6 @@ use Neos\Neos\Ui\NodeCreationHandler\ContentTitleNodeCreationHandler;
  */
 final class ContentTitleNodeCreationHandlerFactory implements ContentRepositoryServiceFactoryInterface
 {
-
     public function build(ContentRepositoryServiceFactoryDependencies $serviceFactoryDependencies): ContentRepositoryServiceInterface
     {
         return new ContentTitleNodeCreationHandler($serviceFactoryDependencies->contentRepository);
