@@ -38,9 +38,6 @@ use Neos\Neos\Ui\Domain\Model\RenderedNodeDomAddress;
 use Neos\Neos\Ui\Domain\Service\NodePropertyConversionService;
 use Neos\Neos\Utility\NodeTypeWithFallbackProvider;
 
-/** @codingStandardsIgnoreStart */
-/** @codingStandardsIgnoreEnd */
-
 /**
  * Changes a property on a node
  */
@@ -155,6 +152,15 @@ class Property extends AbstractChange
 
             $propertyType = $this->getNodeType($subject)->getPropertyType($propertyName);
 
+            $workspace = $this->contentRepositoryRegistry->get($this->subject->subgraphIdentity->contentRepositoryId)
+                ->getWorkspaceFinder()->findOneByCurrentContentStreamId($subject->subgraphIdentity->contentStreamId);
+            if (!$workspace) {
+                throw new \Exception(
+                    'Could not find workspace for content stream "' . $subject->subgraphIdentity->contentStreamId->value . '"',
+                    1699008140
+                );
+            }
+
             // Use extra commands for reference handling
             if ($propertyType === 'reference' || $propertyType === 'references') {
                 $value = $this->getValue();
@@ -177,7 +183,7 @@ class Property extends AbstractChange
 
                 $commandResult = $contentRepository->handle(
                     SetNodeReferences::create(
-                        $subject->subgraphIdentity->contentStreamId,
+                        $workspace->workspaceName,
                         $subject->nodeAggregateId,
                         $subject->originDimensionSpacePoint,
                         ReferenceName::fromString($propertyName),
@@ -198,7 +204,7 @@ class Property extends AbstractChange
                         // if origin dimension space point != current DSP -> translate transparently (matching old behavior)
                         $contentRepository->handle(
                             CreateNodeVariant::create(
-                                $subject->subgraphIdentity->contentStreamId,
+                                $workspace->workspaceName,
                                 $subject->nodeAggregateId,
                                 $subject->originDimensionSpacePoint,
                                 $originDimensionSpacePoint
@@ -207,7 +213,7 @@ class Property extends AbstractChange
                     }
                     $commandResult = $contentRepository->handle(
                         SetNodeProperties::create(
-                            $subject->subgraphIdentity->contentStreamId,
+                            $workspace->workspaceName,
                             $subject->nodeAggregateId,
                             $originDimensionSpacePoint,
                             PropertyValuesToWrite::fromArray(
@@ -222,7 +228,7 @@ class Property extends AbstractChange
                     if ($propertyName === '_nodeType') {
                         $commandResult = $contentRepository->handle(
                             ChangeNodeAggregateType::create(
-                                $subject->subgraphIdentity->contentStreamId,
+                                $workspace->workspaceName,
                                 $subject->nodeAggregateId,
                                 NodeTypeName::fromString($value),
                                 NodeAggregateTypeChangeChildConstraintConflictResolutionStrategy::STRATEGY_DELETE
@@ -232,7 +238,7 @@ class Property extends AbstractChange
                         if ($value === true) {
                             $commandResult = $contentRepository->handle(
                                 DisableNodeAggregate::create(
-                                    $subject->subgraphIdentity->contentStreamId,
+                                    $workspace->workspaceName,
                                     $subject->nodeAggregateId,
                                     $subject->originDimensionSpacePoint->toDimensionSpacePoint(),
                                     NodeVariantSelectionStrategy::STRATEGY_ALL_SPECIALIZATIONS
@@ -242,7 +248,7 @@ class Property extends AbstractChange
                             // unhide
                             $commandResult = $contentRepository->handle(
                                 EnableNodeAggregate::create(
-                                    $subject->subgraphIdentity->contentStreamId,
+                                    $workspace->workspaceName,
                                     $subject->nodeAggregateId,
                                     $subject->originDimensionSpacePoint->toDimensionSpacePoint(),
                                     NodeVariantSelectionStrategy::STRATEGY_ALL_SPECIALIZATIONS
