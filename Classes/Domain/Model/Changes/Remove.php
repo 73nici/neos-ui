@@ -70,7 +70,8 @@ class Remove extends AbstractChange
             $this->updateWorkspaceInfo();
 
             $subgraph = $this->contentRepositoryRegistry->subgraphForNode($this->subject);
-            $closestDocumentParentNode = $subgraph->findClosestNode($this->subject->nodeAggregateId, FindClosestNodeFilter::create(nodeTypeConstraints: NodeTypeNameFactory::NAME_DOCUMENT));
+            $closestDocumentParentNode = $subgraph->findClosestNode($this->subject->nodeAggregateId, FindClosestNodeFilter::create(nodeTypes: NodeTypeNameFactory::NAME_DOCUMENT));
+
             $workspace = $this->contentRepositoryRegistry->get($this->subject->subgraphIdentity->contentRepositoryId)
                 ->getWorkspaceFinder()->findOneByCurrentContentStreamId($subject->subgraphIdentity->contentStreamId);
             if (!$workspace) {
@@ -79,6 +80,7 @@ class Remove extends AbstractChange
                     1699008140
                 );
             }
+
             $command = RemoveNodeAggregate::create(
                 $workspace->workspaceName,
                 $subject->nodeAggregateId,
