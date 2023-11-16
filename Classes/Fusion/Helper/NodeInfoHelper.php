@@ -30,6 +30,7 @@ use Neos\Neos\Ui\Domain\Service\UserLocaleService;
 use Neos\Neos\Utility\NodeTypeWithFallbackProvider;
 
 /**
+ * @internal
  * @Flow\Scope("singleton")
  */
 class NodeInfoHelper implements ProtectedContextAwareInterface

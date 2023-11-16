@@ -44,9 +44,10 @@ class NodePropertyConversionService
      */
     public function convert(NodeType $nodeType, string $propertyName, string|array|null $rawValue): mixed
     {
-        // WORKAROUND: $nodeType->getPropertyType() is missing the "initialize" call,
-        // so we need to trigger another method beforehand.
-        $nodeType->getFullConfiguration();
+        if ($nodeType->hasReference($propertyName)) {
+            throw new \Exception("not implemented here, must be handled outside.");
+        }
+
         $propertyType = $nodeType->getPropertyType($propertyName);
 
         if (is_null($rawValue)) {
@@ -56,12 +57,6 @@ class NodePropertyConversionService
         switch ($propertyType) {
             case 'string':
                 return $rawValue;
-
-            case 'reference':
-                throw new \Exception("not implemented here, must be handled outside.");
-
-            case 'references':
-                throw new \Exception("not implemented here, must be handled outside.");
 
             case 'DateTime':
                 return $this->convertDateTime($rawValue);

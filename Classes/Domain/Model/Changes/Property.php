@@ -134,9 +134,8 @@ class Property extends AbstractChange
         }
         $nodeType = $this->subject->nodeType;
         $propertyName = $this->getPropertyName();
-        $nodeTypeProperties = $nodeType->getProperties();
 
-        return isset($nodeTypeProperties[$propertyName]);
+        return $nodeType->hasProperty($propertyName) || $nodeType->hasReference($propertyName);
     }
 
     /**
@@ -153,26 +152,16 @@ class Property extends AbstractChange
         if ($this->canApply() && !is_null($subject) && !is_null($propertyName)) {
             $contentRepository = $this->contentRepositoryRegistry->get($subject->subgraphIdentity->contentRepositoryId);
 
-            $propertyType = $this->getNodeType($subject)->getPropertyType($propertyName);
-
-            // Use extra commands for reference handling
-            if ($propertyType === 'reference' || $propertyType === 'references') {
+            if ($this->getNodeType($subject)->hasReference($propertyName)) {
+                // Use extra commands for reference handling
                 $value = $this->getValue();
-                $destinationNodeAggregateIds = [];
-                if ($propertyType === 'reference') {
-                    if (is_string($value) && !empty($value)) {
-                        $destinationNodeAggregateIds[] = $value;
-                    }
-                }
 
-                if ($propertyType === 'references') {
-                    /** @var array<int,string> $values */
-                    $values = $value;
-                    if (is_array($values)) {
-                        foreach ($values as $singleNodeAggregateId) {
-                            $destinationNodeAggregateIds[] = $singleNodeAggregateId;
-                        }
-                    }
+                $destinationNodeAggregateIds = [];
+
+                if (is_string($value) && !empty($value)) {
+                    $destinationNodeAggregateIds = [$value];
+                } elseif (is_array($value)) {
+                    $destinationNodeAggregateIds = $value;
                 }
 
                 $commandResult = $contentRepository->handle(
@@ -278,8 +267,12 @@ class Property extends AbstractChange
             $updateNodeInfo->setNode($node);
             $this->feedbackCollection->add($updateNodeInfo);
 
-            $reloadIfChangedConfigurationPath = sprintf('properties.%s.ui.reloadIfChanged', $propertyName);
-            if (!$this->getIsInline() && $this->getNodeType($node)->getConfiguration($reloadIfChangedConfigurationPath)) {
+            if (!$this->getIsInline()
+                && (
+                    $this->getNodeType($node)->hasConfiguration(sprintf('properties.%s.ui.reloadIfChanged', $propertyName))
+                    || $this->getNodeType($node)->hasConfiguration(sprintf('references.%s.ui.reloadIfChanged', $propertyName))
+                )
+            ) {
                 if ($this->getNodeDomAddress() && $this->getNodeDomAddress()->getFusionPath()
                     && $parentNode
                     && $this->getNodeType($parentNode)->isOfType('Neos.Neos:ContentCollection')) {
@@ -292,9 +285,12 @@ class Property extends AbstractChange
                 }
             }
 
-            $reloadPageIfChangedConfigurationPath = sprintf('properties.%s.ui.reloadPageIfChanged', $propertyName);
             if (!$this->getIsInline()
-                && $this->getNodeType($node)->getConfiguration($reloadPageIfChangedConfigurationPath)) {
+                && (
+                    $this->getNodeType($node)->hasConfiguration(sprintf('properties.%s.ui.reloadPageIfChanged', $propertyName))
+                    || $this->getNodeType($node)->hasConfiguration(sprintf('references.%s.ui.reloadPageIfChanged', $propertyName))
+                )
+            ) {
                 $this->reloadDocument($node);
             }
         }

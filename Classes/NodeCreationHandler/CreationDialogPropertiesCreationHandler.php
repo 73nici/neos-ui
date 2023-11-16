@@ -55,7 +55,7 @@ class CreationDialogPropertiesCreationHandler implements NodeCreationHandlerInte
                 continue;
             }
             $propertyValue = $data[$propertyName];
-            if ($propertyType !== 'references' && $propertyType !== 'reference' && $propertyType !== TypeHandling::getTypeForValue($propertyValue)) {
+            if (!$nodeType->hasReference($propertyName) && $propertyType !== TypeHandling::getTypeForValue($propertyValue)) {
                 $propertyValue = $this->propertyMapper->convert($propertyValue, $propertyType, $propertyMappingConfiguration);
             }
 

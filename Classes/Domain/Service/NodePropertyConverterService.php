@@ -17,7 +17,6 @@ namespace Neos\Neos\Ui\Domain\Service;
 use Neos\ContentRepository\Core\NodeType\NodeType;
 use Neos\ContentRepository\Core\Projection\ContentGraph\Filter\FindReferencesFilter;
 use Neos\ContentRepository\Core\Projection\ContentGraph\Node;
-use Neos\ContentRepository\Core\Projection\ContentGraph\References;
 use Neos\ContentRepository\Core\Projection\NodeHiddenState\NodeHiddenStateFinder;
 use Neos\ContentRepositoryRegistry\ContentRepositoryRegistry;
 use Neos\Flow\Annotations as Flow;
@@ -40,6 +39,7 @@ use Psr\Log\LoggerInterface;
  * THIS IS DIRTY CODE. In the longer run, the neos UI should work DIRECTLY with serialized properties
  * instead of the objects.
  *
+ * @internal
  * @Flow\Scope("singleton")
  */
 class NodePropertyConverterService
@@ -100,13 +100,39 @@ class NodePropertyConverterService
     }
 
     /**
-     * Get a single property reduced to a simple type (no objects) representation
-     *
-     * @param Node $node
-     * @param string $propertyName
-     * @return mixed
+     * @return list<string>|string|null
      */
-    public function getProperty(Node $node, $propertyName)
+    private function getReference(Node $node, string $referenceName): array|string|null
+    {
+        $subgraph = $this->contentRepositoryRegistry->subgraphForNode($node);
+        $references = $subgraph->findReferences(
+            $node->nodeAggregateId,
+            FindReferencesFilter::create(referenceName: $referenceName)
+        );
+
+        $referenceIdentifiers = [];
+        foreach ($references as $reference) {
+            $referenceIdentifiers[] = $reference->node->nodeAggregateId->value;
+        }
+
+        $maxItems = $this->getNodeType($node)->getReferences()[$referenceName]['constraints']['maxItems'] ?? null;
+
+        if ($maxItems === 1) {
+            // special handling to simulate old single reference behaviour.
+            // todo should be adjusted in the ui
+            if (count($referenceIdentifiers) === 0) {
+                return null;
+            } else {
+                return reset($referenceIdentifiers);
+            }
+        }
+        return $referenceIdentifiers;
+    }
+
+    /**
+     * Get a single property reduced to a simple type (no objects) representation
+     */
+    private function getProperty(Node $node, string $propertyName): mixed
     {
         if ($propertyName === '_hidden') {
             $contentRepository = $this->contentRepositoryRegistry->get($node->subgraphIdentity->contentRepositoryId);
@@ -118,38 +144,14 @@ class NodePropertyConverterService
                 $node->nodeAggregateId
             )->isHidden;
         }
-        $propertyType = $this->getNodeType($node)->getPropertyType($propertyName);
 
-        // We handle "reference" and "references" differently than other properties;
-        // because we need to use another API for querying these references.
-        if ($propertyType === 'reference') {
-            $subgraph = $this->contentRepositoryRegistry->subgraphForNode($node);
-            $referenceIdentifiers = $this->toNodeIdentifierStrings(
-                $subgraph->findReferences(
-                    $node->nodeAggregateId,
-                    FindReferencesFilter::create(referenceName: $propertyName)
-                )
-            );
-            if (count($referenceIdentifiers) === 0) {
-                return null;
-            } else {
-                return reset($referenceIdentifiers);
-            }
-        } elseif ($propertyType === 'references') {
-            $subgraph = $this->contentRepositoryRegistry->subgraphForNode($node);
-            $references = $subgraph->findReferences(
-                $node->nodeAggregateId,
-                FindReferencesFilter::create(referenceName: $propertyName)
-            );
-
-            return $this->toNodeIdentifierStrings($references);
-            // Here, the normal property access logic starts.
-        } elseif ($propertyName[0] === '_' && $propertyName !== '_hiddenInIndex') {
+        if ($propertyName[0] === '_' && $propertyName !== '_hiddenInIndex') {
             $propertyValue = ObjectAccess::getProperty($node, ltrim($propertyName, '_'));
         } else {
             $propertyValue = $node->getProperty($propertyName);
         }
 
+        $propertyType = $this->getNodeType($node)->getPropertyType($propertyName);
         try {
             $convertedValue = $this->convertValue($propertyValue, $propertyType);
         } catch (PropertyException $exception) {
@@ -175,19 +177,7 @@ class NodePropertyConverterService
     }
 
     /**
-     * @return array<int,string>
-     */
-    private function toNodeIdentifierStrings(References $references): array
-    {
-        $identifiers = [];
-        foreach ($references as $reference) {
-            $identifiers[] = $reference->node->nodeAggregateId->value;
-        }
-        return $identifiers;
-    }
-
-    /**
-     * Get all properties reduced to simple type (no objects) representations in an array
+     * Get all properties and references stuff reduced to simple type (no objects) representations in an array
      *
      * @param Node $node
      * @return array<string,mixed>
@@ -195,7 +185,7 @@ class NodePropertyConverterService
     public function getPropertiesArray(Node $node)
     {
         $properties = [];
-        foreach ($this->getNodeType($node)->getProperties() as $propertyName => $propertyConfiguration) {
+        foreach ($this->getNodeType($node)->getProperties() as $propertyName => $_) {
             if ($propertyName[0] === '_' && $propertyName[1] === '_') {
                 // skip fully-private properties
                 continue;
@@ -203,7 +193,9 @@ class NodePropertyConverterService
 
             $properties[$propertyName] = $this->getProperty($node, $propertyName);
         }
-
+        foreach ($this->getNodeType($node)->getReferences() as $referenceName => $_) {
+            $properties[$referenceName] = $this->getReference($node, $referenceName);
+        }
         return $properties;
     }
 
