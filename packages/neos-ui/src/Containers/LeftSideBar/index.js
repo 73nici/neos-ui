@@ -2,13 +2,10 @@ import React, {PureComponent} from 'react';
 import PropTypes from 'prop-types';
 import mergeClassNames from 'classnames';
 import {connect} from 'react-redux';
-import {$transform, $get} from 'plow-js';
 
 import {actions, selectors} from '@neos-project/neos-ui-redux-store';
 
-import IconButton from '@neos-project/react-ui-components/src/IconButton/';
-
-import SideBar from '@neos-project/react-ui-components/src/SideBar/';
+import {IconButton, SideBar} from '@neos-project/react-ui-components';
 import {neos} from '@neos-project/neos-ui-decorators';
 
 import style from './style.module.css';
@@ -17,12 +14,12 @@ import style from './style.module.css';
     containerRegistry: globalRegistry.get('containers'),
     i18nRegistry: globalRegistry.get('i18n')
 }))
-@connect($transform({
-    isHidden: $get('ui.leftSideBar.isHidden'),
-    isFullScreen: $get('ui.fullScreen.isFullScreen'),
-    isHiddenContentTree: $get('ui.leftSideBar.contentTree.isHidden'),
-    siteNode: selectors.CR.Nodes.siteNodeSelector,
-    documentNode: selectors.CR.Nodes.documentNodeSelector
+@connect(state => ({
+    isHidden: state?.ui?.leftSideBar?.isHidden,
+    isFullScreen: state?.ui?.fullScreen?.isFullScreen,
+    isHiddenContentTree: state?.ui?.leftSideBar?.contentTree?.isHidden,
+    siteNode: selectors.CR.Nodes.siteNodeSelector(state),
+    documentNode: selectors.CR.Nodes.documentNodeSelector(state)
 }), {
     toggleSidebar: actions.UI.LeftSideBar.toggle
 })

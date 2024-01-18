@@ -3,12 +3,10 @@ import PropTypes from 'prop-types';
 import {connect} from 'react-redux';
 import {Portal} from 'react-portal';
 import mergeClassNames from 'classnames';
-import {$get} from 'plow-js';
 
 import {selectors} from '@neos-project/neos-ui-redux-store';
 
-import Icon from '@neos-project/react-ui-components/src/Icon/';
-import Button from '@neos-project/react-ui-components/src/Button/';
+import {Icon, Button} from '@neos-project/react-ui-components';
 
 import style from './style.module.css';
 
@@ -18,9 +16,9 @@ import style from './style.module.css';
     const unappliedChangesOverlayIsVisible = isDirty && !shouldPromptToHandleUnappliedChanges;
 
     return {
-        isFringeLeft: $get('ui.leftSideBar.isHidden', state),
-        isFringeRight: $get('ui.rightSideBar.isHidden', state),
-        isFullScreen: $get('ui.fullScreen.isFullScreen', state),
+        isFringeLeft: state?.ui?.leftSideBar?.isHidden,
+        isFringeRight: state?.ui?.rightSideBar?.isHidden,
+        isFullScreen: state?.ui?.fullScreen?.isFullScreen,
         unappliedChangesOverlayIsVisible
     };
 })

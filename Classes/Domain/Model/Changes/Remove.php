@@ -52,7 +52,6 @@ class Remove extends AbstractChange
      * @throws NodeAggregatesTypeIsAmbiguous
      * @throws ContentStreamDoesNotExistYet
      * @throws DimensionSpacePointNotFound
-     * @throws \Neos\ContentRepository\Exception\NodeException
      */
     public function apply(): void
     {
@@ -71,7 +70,7 @@ class Remove extends AbstractChange
             $this->updateWorkspaceInfo();
 
             $subgraph = $this->contentRepositoryRegistry->subgraphForNode($this->subject);
-            $closestDocumentParentNode = $subgraph->findClosestNode($this->subject->nodeAggregateId, FindClosestNodeFilter::create(nodeTypeConstraints: NodeTypeNameFactory::NAME_DOCUMENT));
+            $closestDocumentParentNode = $subgraph->findClosestNode($this->subject->nodeAggregateId, FindClosestNodeFilter::create(nodeTypes: NodeTypeNameFactory::NAME_DOCUMENT));
             $command = RemoveNodeAggregate::create(
                 $subject->subgraphIdentity->contentStreamId,
                 $subject->nodeAggregateId,
@@ -79,7 +78,7 @@ class Remove extends AbstractChange
                 NodeVariantSelectionStrategy::STRATEGY_ALL_SPECIALIZATIONS,
             );
             if ($closestDocumentParentNode !== null) {
-                $command = $command->withRemovalAttachmentPoint($closestDocumentParentNode?->nodeAggregateId);
+                $command = $command->withRemovalAttachmentPoint($closestDocumentParentNode->nodeAggregateId);
             }
 
             $contentRepository = $this->contentRepositoryRegistry->get($subject->subgraphIdentity->contentRepositoryId);

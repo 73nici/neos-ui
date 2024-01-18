@@ -49,7 +49,10 @@ class WorkspaceHelper implements ProtectedContextAwareInterface
      */
     protected $securityContext;
 
-    public function getAllowedTargetWorkspaces(ContentRepositoryId $contentRepositoryId)
+    /**
+     * @return array<string,array<string,mixed>>
+     */
+    public function getAllowedTargetWorkspaces(ContentRepositoryId $contentRepositoryId): array
     {
         $contentRepository = $this->contentRepositoryRegistry->get($contentRepositoryId);
         return $this->workspaceService->getAllowedTargetWorkspaces($contentRepository);
@@ -72,7 +75,8 @@ class WorkspaceHelper implements ProtectedContextAwareInterface
                 'baseWorkspace' => $personalWorkspace->baseWorkspaceName,
                 // TODO: FIX readonly flag!
                 //'readOnly' => !$this->domainUserService->currentUserCanPublishToWorkspace($baseWorkspace)
-                'readOnly' => false
+                'readOnly' => false,
+                'status' => $personalWorkspace->status->value
             ]
             : [];
     }

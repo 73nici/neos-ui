@@ -56,7 +56,8 @@ class ContentDimensionsHelper implements ProtectedContextAwareInterface
                 $result[$dimension->id->value]['presets'][$value->value] = [
                     // TODO: name, uriSegment!
                     'values' => [$value->value],
-                    'label' => $value->getConfigurationValue('label')
+                    'label' => $value->getConfigurationValue('label'),
+                    'group' => $value->getConfigurationValue('group'),
                 ];
             }
         }
@@ -88,6 +89,7 @@ class ContentDimensionsHelper implements ProtectedContextAwareInterface
         return $allowedPresets;
     }
 
+    /** @return array<string,array<int,string>> */
     public function dimensionSpacePointArray(AbstractDimensionSpacePoint $dimensionSpacePoint): array
     {
         return $dimensionSpacePoint->toLegacyDimensionArray();

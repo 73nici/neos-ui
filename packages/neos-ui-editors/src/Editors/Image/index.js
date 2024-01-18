@@ -1,13 +1,15 @@
 import React, {Component} from 'react';
 import PropTypes from 'prop-types';
-import {$set, $drop, $get} from 'plow-js';
+import {connect} from 'react-redux';
 import mergeClassNames from 'classnames';
+import produce from 'immer';
+import {selectors} from '@neos-project/neos-ui-redux-store';
 
 import backend from '@neos-project/neos-ui-backend-connector';
 import {neos} from '@neos-project/neos-ui-decorators';
 
 import {PreviewScreen, Controls, ResizeControls} from './Components/index';
-import {Image, CROP_IMAGE_ADJUSTMENT, RESIZE_IMAGE_ADJUSTMENT} from './Utils/index';
+import {Image} from './Utils/index';
 
 import style from './style.module.css';
 
@@ -18,6 +20,10 @@ const DEFAULT_FEATURES = {
     upload: true
 };
 
+@connect(state => ({
+    siteNodePath: state?.cr?.nodes?.siteNode,
+    focusedNodePath: selectors.CR.Nodes.focusedNodePathSelector(state)
+}), null, null, {forwardRef: true})
 @neos(globalRegistry => ({secondaryEditorsRegistry: globalRegistry.get('inspector').get('secondaryEditors')}))
 export default class ImageEditor extends Component {
     state = {
@@ -48,7 +54,10 @@ export default class ImageEditor extends Component {
         // I18N key
         fileChooserLabel: PropTypes.string,
 
-        accept: PropTypes.string
+        accept: PropTypes.string,
+
+        siteNodePath: PropTypes.string.isRequired,
+        focusedNodePath: PropTypes.string.isRequired
     };
 
     static defaultProps = {
@@ -93,7 +102,7 @@ export default class ImageEditor extends Component {
                         isAssetLoading: false
                     }, () => {
                         // When forceCrop option is enabled and we were requested to do the force cropping...
-                        if (this.state.requestOpenImageCropper && $get('crop.aspectRatio.forceCrop', this.props.options)) {
+                        if (this.state.requestOpenImageCropper && this.props.options?.crop?.aspectRatio?.forceCrop) {
                             this.handleCloseSecondaryScreen();
                             this.handleOpenImageCropper();
                             this.setState({requestOpenImageCropper: false});
@@ -125,9 +134,9 @@ export default class ImageEditor extends Component {
         const {commit, value} = this.props;
         const {image} = this.state;
 
-        const imageWidth = $get('originalDimensions.width', image);
-        const imageHeight = $get('originalDimensions.height', image);
-        const currentCropAdjustments = $get(CROP_IMAGE_ADJUSTMENT, image);
+        const imageWidth = image?.originalDimensions?.width;
+        const imageHeight = image?.originalDimensions?.height;
+        const currentCropAdjustments = image?.object?.adjustments?.['Neos\\Media\\Domain\\Model\\Adjustment\\CropImageAdjustment'];
         const nextCropAdjustments = {
             x: Math.round(cropArea.x / 100 * imageWidth),
             y: Math.round(cropArea.y / 100 * imageHeight),
@@ -141,7 +150,16 @@ export default class ImageEditor extends Component {
             currentCropAdjustments.height !== nextCropAdjustments.height;
 
         if (cropAdjustmentsHaveChanged) {
-            const nextimage = $set(CROP_IMAGE_ADJUSTMENT, nextCropAdjustments, image);
+            const nextimage = produce(image, draft => {
+                if (draft.object === undefined) {
+                    draft.object = {};
+                }
+                if (draft.object.adjustments === undefined) {
+                    draft.object.adjustments = {};
+                }
+
+                draft.object.adjustments['Neos\\Media\\Domain\\Model\\Adjustment\\CropImageAdjustment'] = nextCropAdjustments;
+            });
 
             commit(value, {'Neos.UI:Hook.BeforeSave.CreateImageVariant': nextimage});
         }
@@ -152,9 +170,27 @@ export default class ImageEditor extends Component {
     handleResize = resizeAdjustment => {
         const {commit, value} = this.props;
         const {image} = this.state;
-        const nextimage = resizeAdjustment ?
-            $set(RESIZE_IMAGE_ADJUSTMENT, resizeAdjustment, image) :
-            $drop(RESIZE_IMAGE_ADJUSTMENT, image);
+        const nextimage = produce(image, draft => {
+            if (resizeAdjustment) {
+                if (draft.object === undefined) {
+                    draft.object = {};
+                }
+                if (draft.object.adjustments === undefined) {
+                    draft.object.adjustments = {};
+                }
+
+                draft.object.adjustments['Neos\\Media\\Domain\\Model\\Adjustment\\ResizeImageAdjustment'] = resizeAdjustment;
+            } else {
+                if (draft.object === undefined) {
+                    return;
+                }
+                if (draft.object.adjustments === undefined) {
+                    return;
+                }
+
+                delete draft.object.adjustments['Neos\\Media\\Domain\\Model\\Adjustment\\ResizeImageAdjustment'];
+            }
+        });
         this.setState({image: nextimage});
         commit(value, {'Neos.UI:Hook.BeforeSave.CreateImageVariant': nextimage});
     }
@@ -205,7 +241,7 @@ export default class ImageEditor extends Component {
     handleThumbnailClicked = () => {
         const {secondaryEditorsRegistry} = this.props;
         const {component: MediaDetailsScreen} = secondaryEditorsRegistry.get('Neos.Neos/Inspector/Secondary/Editors/MediaDetailsScreen');
-        const imageIdentity = $get('originalAsset.__identity', this.props.value) || $get('__identity', this.props.value);
+        const imageIdentity = this.props.value?.originalAsset?.__identity || this.props.value?.__identity;
 
         if (imageIdentity) {
             this.props.renderSecondaryInspector('IMAGE_MEDIA_DETAILS', () => <MediaDetailsScreen onClose={this.handleCloseSecondaryScreen} imageIdentity={imageIdentity}/>);
@@ -215,8 +251,22 @@ export default class ImageEditor extends Component {
     }
 
     handleChooseFile = () => {
-        this.previewScreen.chooseFromLocalFileSystem();
-        this.setState({isAssetLoading: true});
+        const {secondaryEditorsRegistry, options} = this.props;
+        if (secondaryEditorsRegistry.get('Neos.Neos/Inspector/Secondary/Editors/AssetUploadScreen')) {
+            // set media type constraint to "image/*" if it is not explicitly specified via options.constraints.mediaTypes
+            const constraints = {...options.constraints, mediaTypes: (options.constraints && options.constraints.mediaTypes) || ['image/*']};
+            const {component: AssetUploadScreen} = secondaryEditorsRegistry.get('Neos.Neos/Inspector/Secondary/Editors/AssetUploadScreen');
+            const additionalData = {
+                propertyName: this.props.identifier,
+                focusedNodePath: this.props.focusedNodePath,
+                siteNodePath: this.props.siteNodePath,
+                metaData: 'Image'
+            };
+            this.props.renderSecondaryInspector('IMAGE_UPLOAD_MEDIA', () => <AssetUploadScreen type="images" constraints={constraints} onComplete={this.afterUpload} additionalData={additionalData}/>);
+        } else {
+            this.previewScreen.chooseFromLocalFileSystem();
+            this.setState({isAssetLoading: true});
+        }
     }
 
     handleChooseFromMedia = () => {
@@ -242,16 +292,16 @@ export default class ImageEditor extends Component {
 
     isCroppable = () => {
         const {image} = this.state;
-        const mediaType = $get('mediaType', image);
+        const mediaType = image?.mediaType;
         return this.isFeatureEnabled('crop') && image && !mediaType.includes('svg');
     }
 
     render() {
         const {isAssetLoading, image} = this.state;
         const {className} = this.props;
-        const disabled = $get('options.disabled', this.props);
-        const mediaTypeConstraint = $get('options.constraints.mediaTypes', this.props);
-        const accept = $get('options.accept', this.props) || (mediaTypeConstraint && mediaTypeConstraint.join(','));
+        const disabled = this.props?.options?.disabled;
+        const mediaTypeConstraint = this.props?.options?.constraints?.mediaTypes;
+        const accept = this.props?.options?.accept || (mediaTypeConstraint && mediaTypeConstraint.join(','));
 
         const classNames = mergeClassNames({
             [style.imageEditor]: true
@@ -263,12 +313,18 @@ export default class ImageEditor extends Component {
                     this.handleRemoveFile :
                     null} onCrop={this.isCroppable() ?
                     this.handleOpenImageCropper :
-                    null} disabled={disabled}/> {
-                this.isFeatureEnabled('resize') && <ResizeControls onChange={this.handleResize} resizeAdjustment={$get(RESIZE_IMAGE_ADJUSTMENT, image)} imageDimensions={{
-                    width: $get('originalDimensions.width', image),
-                    height: $get('originalDimensions.height', image)
-                }} disabled={disabled}/>
-            }
+                    null} disabled={disabled}/>
+            {this.isFeatureEnabled('resize') ? (
+                <ResizeControls
+                    onChange={this.handleResize}
+                    resizeAdjustment={image?.object?.adjustments?.['Neos\\Media\\Domain\\Model\\Adjustment\\ResizeImageAdjustment']}
+                    imageDimensions={{
+                        width: image?.originalDimensions?.width,
+                        height: image?.originalDimensions?.height
+                    }}
+                    disabled={disabled}
+                />
+            ) : null}
         </div>);
     }
 

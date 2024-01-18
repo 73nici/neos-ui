@@ -1,13 +1,10 @@
 import React, {PureComponent} from 'react';
 import PropTypes from 'prop-types';
 import {connect} from 'react-redux';
-import {$transform, $get} from 'plow-js';
 
 import {neos} from '@neos-project/neos-ui-decorators';
 
-import Button from '@neos-project/react-ui-components/src/Button/';
-import Dialog from '@neos-project/react-ui-components/src/Dialog/';
-import Icon from '@neos-project/react-ui-components/src/Icon/';
+import {Button, Dialog, Icon} from '@neos-project/react-ui-components';
 import I18n from '@neos-project/neos-ui-i18n';
 
 import {InsertModeSelector} from '@neos-project/neos-ui-containers';
@@ -16,14 +13,14 @@ import {selectors, actions, actionTypes} from '@neos-project/neos-ui-redux-store
 
 import style from './style.module.css';
 
-@connect($transform({
-    isOpen: $get('ui.insertionModeModal.isOpen'),
-    subjectContextPaths: $get('ui.insertionModeModal.subjectContextPaths'),
-    referenceContextPath: $get('ui.insertionModeModal.referenceContextPath'),
-    enableAlongsideModes: $get('ui.insertionModeModal.enableAlongsideModes'),
-    enableIntoMode: $get('ui.insertionModeModal.enableIntoMode'),
-    operationType: $get('ui.insertionModeModal.operationType'),
-    getNodeByContextPath: selectors.CR.Nodes.nodeByContextPath
+@connect(state => ({
+    isOpen: state?.ui?.insertionModeModal?.isOpen,
+    subjectContextPaths: state?.ui?.insertionModeModal?.subjectContextPaths,
+    referenceContextPath: state?.ui?.insertionModeModal?.referenceContextPath,
+    enableAlongsideModes: state?.ui?.insertionModeModal?.enableAlongsideModes,
+    enableIntoMode: state?.ui?.insertionModeModal?.enableIntoMode,
+    operationType: state?.ui?.insertionModeModal?.operationType,
+    getNodeByContextPath: selectors.CR.Nodes.nodeByContextPath(state)
 }), {
     cancel: actions.UI.InsertionModeModal.cancel,
     apply: actions.UI.InsertionModeModal.apply
@@ -75,8 +72,8 @@ export default class InsertModeModal extends PureComponent {
         }
         const contextPath = contextPaths[0];
         const node = getNodeByContextPath(contextPath);
-        const getLabel = $get('label');
-        const getNodeType = $get('nodeType');
+        const getLabel = node => node?.label;
+        const getNodeType = node => node?.nodeType;
         const getNodeTypeLabel = (...args) => getLabel(nodeTypesRegistry.get.bind(nodeTypesRegistry)(getNodeType(...args)));
 
         return `${i18nRegistry.translate(getNodeTypeLabel(node))} ${getLabel(node)}`;

@@ -1,5 +1,3 @@
-import {$set} from 'plow-js';
-
 import {actionTypes, actions, reducer, selectors} from './index';
 import {actionTypes as system} from '../../System/index';
 
@@ -11,6 +9,7 @@ test(`should export actionTypes`, () => {
     expect(typeof (actionTypes.DISCARD_ABORTED)).toBe('string');
     expect(typeof (actionTypes.DISCARD_CONFIRMED)).toBe('string');
     expect(typeof (actionTypes.CHANGE_BASE_WORKSPACE)).toBe('string');
+    expect(typeof (actionTypes.REBASE_WORKSPACE)).toBe('string');
 });
 
 test(`should export action creators`, () => {
@@ -21,6 +20,7 @@ test(`should export action creators`, () => {
     expect(typeof (actions.abortDiscard)).toBe('function');
     expect(typeof (actions.confirmDiscard)).toBe('function');
     expect(typeof (actions.changeBaseWorkspace)).toBe('function');
+    expect(typeof (actions.rebaseWorkspace)).toBe('function');
 });
 
 test(`should export a reducer`, () => {
@@ -36,7 +36,15 @@ test(`The reducer should create a valid initial state`, () => {
     const state = {};
     const nextState = reducer(state, {
         type: system.INIT,
-        payload: $set('cr.workspaces.personalWorkspace', {initial: 'workspace-data'}, {})
+        payload: {
+            cr: {
+                workspaces: {
+                    personalWorkspace: {
+                        initial: 'workspace-data'
+                    }
+                }
+            }
+        }
     });
 
     expect(nextState).toMatchSnapshot();
@@ -45,7 +53,15 @@ test(`The reducer should create a valid initial state`, () => {
 test(`UPDATE should set personal workspace data to given data`, () => {
     const state = reducer({}, {
         type: system.INIT,
-        payload: $set('cr.workspaces.personalWorkspace', {initial: 'workspace-data'}, {})
+        payload: {
+            cr: {
+                workspaces: {
+                    personalWorkspace: {
+                        initial: 'workspace-data'
+                    }
+                }
+            }
+        }
     });
     const action = actions.update({totally: 'different-workspace-data'});
     const nextState = reducer(state, action);

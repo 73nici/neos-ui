@@ -1,11 +1,13 @@
 import React, {PureComponent} from 'react';
 import PropTypes from 'prop-types';
+import {connect} from 'react-redux';
 import MultiSelectBox from '@neos-project/react-ui-components/src/MultiSelectBox/';
 import SelectBox from '@neos-project/react-ui-components/src/SelectBox/';
 import {dndTypes} from '@neos-project/neos-ui-constants';
 import {neos} from '@neos-project/neos-ui-decorators';
-import {$get} from 'plow-js';
 import Controls from './Components/Controls/index';
+import {selectors} from '@neos-project/neos-ui-redux-store';
+
 import AssetOption from '../../Library/AssetOption';
 import {AssetUpload} from '../../Library/index';
 import backend from '@neos-project/neos-ui-backend-connector';
@@ -15,6 +17,10 @@ const DEFAULT_FEATURES = {
     upload: true
 };
 
+@connect(state => ({
+    siteNodePath: state?.cr?.nodes?.siteNode,
+    focusedNodePath: selectors.CR.Nodes.focusedNodePathSelector(state)
+}), null, null, {forwardRef: true})
 @neos(globalRegistry => ({
     assetLookupDataLoader: globalRegistry.get('dataLoaders').get('AssetLookup'),
     i18nRegistry: globalRegistry.get('i18n'),
@@ -45,7 +51,9 @@ export default class AssetEditor extends PureComponent {
         }).isRequired,
         secondaryEditorsRegistry: PropTypes.object.isRequired,
         renderSecondaryInspector: PropTypes.func.isRequired,
-        imagesOnly: PropTypes.bool
+        imagesOnly: PropTypes.bool,
+        siteNodePath: PropTypes.string.isRequired,
+        focusedNodePath: PropTypes.string.isRequired
     };
 
     static defaultProps = {
@@ -180,12 +188,34 @@ export default class AssetEditor extends PureComponent {
         }
     }
 
+    afterUpload = uploadResult => {
+        if (uploadResult?.object) {
+            this.handleValueChange(uploadResult?.object?.__identity);
+        } else {
+            this.handleValuesChange(uploadResult);
+        }
+    }
+
     handleChooseFile = () => {
-        this.assetUpload.chooseFromLocalFileSystem();
+        const {secondaryEditorsRegistry, options} = this.props;
+        if (secondaryEditorsRegistry.get('Neos.Neos/Inspector/Secondary/Editors/AssetUploadScreen')) {
+            // set media type constraint to "image/*" if it is not explicitly specified via options.constraints.mediaTypes
+            const constraints = {...options.constraints, mediaTypes: (options.constraints && options.constraints.mediaTypes) || ['image/*']};
+            const {component: AssetUploadScreen} = secondaryEditorsRegistry.get('Neos.Neos/Inspector/Secondary/Editors/AssetUploadScreen');
+            const additionalData = {
+                propertyName: this.props.identifier,
+                focusedNodePath: this.props.focusedNodePath,
+                siteNodePath: this.props.siteNodePath,
+                metaData: this.props.imagesOnly ? 'Image' : 'Asset'
+            };
+            this.props.renderSecondaryInspector('ASSET_UPLOAD_MEDIA', () => <AssetUploadScreen type={this.props.imagesOnly ? 'images' : 'all'} constraints={constraints} onComplete={this.afterUpload} additionalData={additionalData}/>);
+        } else {
+            this.assetUpload.chooseFromLocalFileSystem();
+        }
     }
 
     renderControls() {
-        const disabled = $get('options.disabled', this.props);
+        const disabled = this.props?.options?.disabled;
 
         return (
             <Controls
@@ -199,9 +229,9 @@ export default class AssetEditor extends PureComponent {
     }
 
     renderAssetSelectorAndUpload() {
-        const mediaTypeConstraint = $get('options.constraints.mediaTypes', this.props);
-        const accept = $get('options.accept', this.props) || (mediaTypeConstraint && mediaTypeConstraint.join(','));
-        const multiple = $get('options.multiple', this.props);
+        const mediaTypeConstraint = this.props?.options?.constraints?.mediaTypes;
+        const accept = this.props?.options?.accept || (mediaTypeConstraint && mediaTypeConstraint.join(','));
+        const multiple = this.props?.options?.multiple;
         const {className, imagesOnly, value, identifier} = this.props;
 
         if (!this.isFeatureEnabled('upload')) {
@@ -226,19 +256,19 @@ export default class AssetEditor extends PureComponent {
     }
 
     renderAssetSelect() {
-        const multiple = $get('options.multiple', this.props);
+        const multiple = this.props?.options?.multiple;
 
         return multiple ? this.renderAssetMultiSelect() : this.renderAssetSingleSelect();
     }
 
     renderAssetSingleSelect() {
-        const disabled = $get('options.disabled', this.props);
+        const disabled = this.props?.options?.disabled;
 
         return (
             <SelectBox
                 optionValueField="identifier"
                 loadingLabel={this.props.i18nRegistry.translate('Neos.Neos:Main:loading')}
-                displaySearchBox={true}
+                displaySearchBox={this.isFeatureEnabled('mediaBrowser')}
                 ListPreviewElement={AssetOption}
                 placeholder={this.props.i18nRegistry.translate(this.props.placeholder)}
                 options={this.props.value ? this.state.options : this.state.searchOptions}
@@ -251,21 +281,21 @@ export default class AssetEditor extends PureComponent {
                 onSearchTermChange={this.handleSearchTermChange}
                 noMatchesFoundLabel={this.props.i18nRegistry.translate('Neos.Neos:Main:noMatchesFound')}
                 searchBoxLeftToTypeLabel={this.props.i18nRegistry.translate('Neos.Neos:Main:searchBoxLeftToType')}
-                threshold={$get('options.threshold', this.props)}
+                threshold={this.props?.options?.threshold}
                 disabled={disabled}
             />
         );
     }
 
     renderAssetMultiSelect() {
-        const disabled = $get('options.disabled', this.props);
+        const disabled = this.props?.options?.disabled;
 
         return (
             <MultiSelectBox
                 dndType={dndTypes.MULTISELECT}
                 optionValueField="identifier"
                 loadingLabel={this.props.i18nRegistry.translate('Neos.Neos:Main:loading')}
-                displaySearchBox={true}
+                displaySearchBox={this.isFeatureEnabled('mediaBrowser')}
                 ListPreviewElement={AssetOption}
                 placeholder={this.props.i18nRegistry.translate(this.props.placeholder)}
                 options={this.state.options || []}
@@ -277,7 +307,7 @@ export default class AssetEditor extends PureComponent {
                 onSearchTermChange={this.handleSearchTermChange}
                 noMatchesFoundLabel={this.props.i18nRegistry.translate('Neos.Neos:Main:noMatchesFound')}
                 searchBoxLeftToTypeLabel={this.props.i18nRegistry.translate('Neos.Neos:Main:searchBoxLeftToType')}
-                threshold={$get('options.threshold', this.props)}
+                threshold={this.props?.options?.threshold}
                 disabled={disabled}
             />
         );
